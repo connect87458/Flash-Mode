@@ -38,12 +38,12 @@ jobs:
       - name: Extract website
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           mkdir -p website
           unzip -o "Flash Mode.zip" -d website
 
-          INDEX_FILE="$(find website -type f -name index.html | head -n 1)"
+          INDEX_FILE="$(find website -type f -name index.html -print -quit)"
 
           if [ -z "$INDEX_FILE" ]; then
             echo "ERROR: index.html not found in Flash Mode.zip"
@@ -61,37 +61,35 @@ jobs:
       - name: Create Capacitor project
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           npm init -y
 
           npm install @capacitor/core@latest @capacitor/android@latest
           npm install --save-dev @capacitor/cli@latest
 
-          npx cap init "Security Support" "com.flashmode.app" --web-dir www
+          npx cap init "Flash Mode" "com.flashmode.app" --web-dir www
           npx cap add android
 
       - name: Set Existing Logo
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           if [ ! -f "logo.png" ]; then
             echo "ERROR: logo.png not found in repository root."
             exit 1
           fi
 
-          # Keep the original image unchanged.
-          # Copy it into Android's drawable resources.
           mkdir -p android/app/src/main/res/drawable-nodpi
-          cp logo.png android/app/src/main/res/drawable-nodpi/security_support_logo.png
+          cp logo.png android/app/src/main/res/drawable-nodpi/flash_mode_logo.png
 
-          echo "Existing logo copied without modification."
+          echo "Existing logo copied successfully."
 
       - name: Configure Android Back Button
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           mkdir -p android/app/src/main/java/com/flashmode/app
 
@@ -117,7 +115,7 @@ jobs:
                   if (webView.canGoBack()) {
                       webView.goBack();
                   } else {
-                      finish();
+                      super.onBackPressed();
                   }
               }
           }
@@ -129,54 +127,42 @@ jobs:
       - name: Configure App Icon
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           python3 - <<'PY'
           import re
           from pathlib import Path
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
-          text = manifest.read_text()
+          text = manifest.read_text(encoding="utf-8")
 
           match = re.search(r'<application\b[^>]*>', text, re.DOTALL)
+
           if not match:
               raise SystemExit("ERROR: Android application tag not found.")
 
           tag = match.group(0)
 
-          # Use the existing logo resource as the icon reference.
-          # Android's adaptive icon system does not accept an arbitrary
-          # drawable PNG directly as an adaptive-icon XML resource.
-          # Use a standard drawable reference for the launcher icon.
-          tag = re.sub(
-              r'\s+android:icon="[^"]*"',
-              '',
-              tag
-          )
+          tag = re.sub(r'\s+android:icon="[^"]*"', '', tag)
+          tag = re.sub(r'\s+android:roundIcon="[^"]*"', '', tag)
 
-          tag = re.sub(
-              r'\s+android:roundIcon="[^"]*"',
-              '',
-              tag
-          )
-
-          tag = tag[:-1] + (
-              ' android:icon="@drawable/security_support_logo"'
-              '>'
-          )
+          tag = tag[:-1] + ' android:icon="@drawable/flash_mode_logo">'
 
           text = text[:match.start()] + tag + text[match.end():]
-          manifest.write_text(text)
+          manifest.write_text(text, encoding="utf-8")
 
-          print("Manifest now references the existing logo.")
+          print("Manifest icon reference configured successfully.")
           PY
 
-          test -f android/app/src/main/res/drawable-nodpi/Flash_Mode_logo.png
+          test -f android/app/src/main/res/drawable-nodpi/flash_mode_logo.png
+
+          grep -q 'android:icon="@drawable/flash_mode_logo"' \
+            android/app/src/main/AndroidManifest.xml
 
       - name: Build debug APK
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           cd android
           chmod +x gradlew
